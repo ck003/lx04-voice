@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "lx04-voice"
-include ':app'
+include(":app")
