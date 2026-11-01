@@ -210,19 +210,29 @@ class AssistSession(
     private fun sendFrame(opcode: Int, payload: ByteArray) {
         try {
             val o = out ?: return
+            val mask = ByteArray(4)
+            Random().nextBytes(mask)
+
             o.write(0x80 or opcode)
             val len = payload.size
+            // 客户端帧必须设置 MASK 位 (0x80)
             when {
-                len < 126 -> o.write(len)
+                len < 126 -> o.write(0x80 or len)
                 len < 65536 -> {
-                    o.write(126); o.write((len shr 8) and 0xFF); o.write(len and 0xFF)
+                    o.write(0x80 or 126); o.write((len shr 8) and 0xFF); o.write(len and 0xFF)
                 }
                 else -> {
-                    o.write(127)
+                    o.write(0x80 or 127)
                     for (i in 7 downTo 0) o.write((len.toLong() shr (8 * i)).toInt() and 0xFF)
                 }
             }
-            o.write(payload)
+            o.write(mask)
+            // 掩码加密 payload
+            val masked = ByteArray(len)
+            for (i in 0 until len) {
+                masked[i] = (payload[i].toInt() xor mask[i % 4].toInt()).toByte()
+            }
+            o.write(masked)
             o.flush()
         } catch (e: Exception) {
             Log.e(TAG, "send frame: ${e.message}")
