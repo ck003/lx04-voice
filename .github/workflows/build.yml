@@ -22,13 +22,10 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install SDK platform 27 (Android 8.1 — LX04)
+      - name: Accept Android SDK licenses
         run: |
-          sdkmanager --install "platforms;android-27" "build-tools;33.0.2"
-          yes | sdkmanager --licenses > /dev/null || true
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --list_installed 2>/dev/null | head -20 || true
 
       - name: Set up Gradle 8.2
         uses: gradle/actions/setup-gradle@v3
