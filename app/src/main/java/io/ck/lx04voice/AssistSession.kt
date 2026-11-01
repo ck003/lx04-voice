@@ -42,6 +42,8 @@ class AssistSession(
     private var msgId = 0
     private var handlerId = 1
     private var audio: AudioRecord? = null
+    private var sentFrames = 0
+    private var lastLogAt = 0L
 
     fun run() {
         val uri = URI(haUrl.replace("http://", "ws://").replace("https://", "wss://") + "/api/websocket")
@@ -154,16 +156,25 @@ class AssistSession(
             audio?.startRecording()
             Thread {
                 val buf = ShortArray(1600)  // 100ms
-                val bytes = ByteArray(3200)
                 while (audio?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                     val n = audio?.read(buf, 0, buf.size) ?: -1
                     if (n <= 0) continue
+                    val bytes = ByteArray(n * 2)
+                    var sum = 0.0
                     for (i in 0 until n) {
                         val v = buf[i].toInt()
                         bytes[i * 2] = (v and 0xFF).toByte()
                         bytes[i * 2 + 1] = ((v shr 8) and 0xFF).toByte()
+                        sum += v.toDouble() * v
                     }
                     sendBinary(bytes, n * 2)
+                    sentFrames++
+                    val now = System.currentTimeMillis()
+                    if (now - lastLogAt > 2000) {
+                        lastLogAt = now
+                        val rms = Math.sqrt(sum / n)
+                        Log.i(TAG, "audio frames=$sentFrames rms=${"%.0f".format(rms)}")
+                    }
                 }
             }.also { it.isDaemon = true }.start()
         } catch (e: Exception) {
