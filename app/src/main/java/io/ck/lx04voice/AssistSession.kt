@@ -66,7 +66,9 @@ class AssistSession(
 
         // 启动 pipeline，从 wake_word 开始
         handlerId = 1
-        sendText("""{"id":${++msgId},"type":"assist_pipeline/run","start_stage":"wake_word","end_stage":"tts","input":{"sample_rate":16000,"timeout":300},"pipeline":"$pipeline"}""")
+        val runMsg = """{"id":${++msgId},"type":"assist_pipeline/run","start_stage":"wake_word","end_stage":"tts","input":{"sample_rate":16000,"timeout":300},"pipeline":"$pipeline"}"""
+        Log.i(TAG, "run: $runMsg")
+        sendText(runMsg)
 
         // 收到 run-start / wake_word-start 后开始推音频
         var started = false
