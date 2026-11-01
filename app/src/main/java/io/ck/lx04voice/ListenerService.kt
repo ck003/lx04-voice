@@ -102,18 +102,20 @@ class ListenerService : Service() {
      * 需要 root，本机已 root。
      */
     private fun prepareDevice() {
-        runRoot("setprop ctl.stop mivpm")
-        runRoot("tinymix \"Int Spk Amp Switch\" 1")
-        runRoot("tinymix \"Int Spk Amp Playback Volume\" 10")
-        runRoot("tinymix \"Audio Amp Playback Volume\" 5 5")
-        Log.i(TAG, "device prepared: mivpm stopped, speaker on")
+        runRoot("/system/xbin/su root sh -c 'setprop ctl.stop mivpm'")
+        runRoot("/system/xbin/su root sh -c 'tinymix \"Int Spk Amp Switch\" 1'")
+        runRoot("/system/xbin/su root sh -c 'tinymix \"Int Spk Amp Playback Volume\" 10'")
+        runRoot("/system/xbin/su root sh -c 'tinymix \"Audio Amp Playback Volume\" 5 5'")
+        Log.i(TAG, "device prepared")
     }
 
     private fun runRoot(cmd: String) {
         try {
-            val p = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+            val p = ProcessBuilder("/system/bin/sh", "-c", cmd)
+                .redirectErrorStream(true).start()
+            val out = p.inputStream.bufferedReader().readText()
             p.waitFor()
-            Log.i(TAG, "root: $cmd -> ${p.exitValue()}")
+            Log.i(TAG, "root[$cmd] -> ${p.exitValue()} ${out.take(80)}")
         } catch (e: Exception) {
             Log.w(TAG, "root failed: $cmd ${e.message}")
         }
