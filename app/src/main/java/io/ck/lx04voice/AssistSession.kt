@@ -58,6 +58,7 @@ class AssistSession(
         Log.i(TAG, "auth: token len=${token.length} start=${token.take(12)} end=${token.takeLast(12)}")
         sendText("""{"type":"auth","access_token":"$token"}""")
         val authResp = readText() ?: ""
+        Log.i(TAG, "authResp raw: ${authResp.take(200)}")
         if (!authResp.contains("auth_ok")) {
             onError("认证失败: ${authResp.take(120)}")
             close(); return
