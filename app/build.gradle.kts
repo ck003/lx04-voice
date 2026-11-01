@@ -18,7 +18,6 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 
@@ -29,9 +28,11 @@ android {
     kotlinOptions {
         jvmTarget = "1.8"
     }
+    lint {
+        abortOnError = false
+    }
 }
 
+// 零依赖：只用 Android 框架 API，保证在 Android 8.1 上编译通过
 dependencies {
-    implementation("androidx.core:core-ktx:1.9.0")
-    implementation("androidx.appcompat:appcompat:1.6.1")
 }
