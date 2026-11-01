@@ -66,13 +66,13 @@ class AssistSession(
 
         // 启动 pipeline，从 wake_word 开始
         handlerId = 1
+        msgId = 100
         val runMsg = """{"id":${++msgId},"type":"assist_pipeline/run","start_stage":"wake_word","end_stage":"tts","input":{"sample_rate":16000,"timeout":300},"pipeline":"$pipeline"}"""
         Log.i(TAG, "run: $runMsg")
         sendText(runMsg)
 
-        // 收到 run-start / wake_word-start 后开始推音频
-        var started = false
-        startAudio()
+        // 先不录音，等收到 wake_word-start 再开始推流
+        var audioStarted = false
 
         while (true) {
             val raw = try { readText() } catch (e: Exception) { break }
@@ -83,7 +83,11 @@ class AssistSession(
             val type = obj.optString("type")
 
             if (type == "result") {
-                // 一次会话结束，跳出等重连
+                Log.i(TAG, "result: ${obj.optBoolean("success")} ${obj.optString("error")}")
+                if (obj.optBoolean("success") == false) {
+                    val err = obj.optJSONObject("error")
+                    onError("pipeline: ${err?.optString("message") ?: "unknown"}")
+                }
                 break
             }
             if (type != "event") continue
@@ -96,10 +100,12 @@ class AssistSession(
                 "run-start" -> {
                     handlerId = data.optJSONObject("runner_data")
                         ?.optInt("stt_binary_handler_id", 1) ?: 1
-                    started = true
                     onState("等待唤醒词")
                 }
-                "wake_word-start" -> { started = true; onState("等待唤醒词") }
+                "wake_word-start" -> {
+                    onState("等待唤醒词")
+                    if (!audioStarted) { audioStarted = true; startAudio() }
+                }
                 "wake_word-end" -> {
                     val ww = data.optJSONObject("wake_word_output")
                     onState("已唤醒 ${ww?.optString("wake_word_phrase") ?: ""}")
@@ -120,9 +126,12 @@ class AssistSession(
                     val t = data.optJSONObject("tts_output")?.optString("url")
                     if (!t.isNullOrEmpty()) onTtsUrl(t)
                 }
+                "run-end" -> {
+                    Log.i(TAG, "run ended")
+                    break
+                }
                 "error" -> {
-                    val code = data.optString("code")
-                    onError("pipeline: $code")
+                    onError("pipeline: ${data.optString("code")}")
                 }
             }
         }
