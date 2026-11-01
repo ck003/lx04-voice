@@ -54,9 +54,9 @@ class AssistSession(
         onState("已连接")
 
         // 认证
-        val authReq = readText()
+        readText()
         sendText("""{"type":"auth","access_token":"$token"}""")
-        val authResp = readText()
+        val authResp = readText() ?: ""
         if (!authResp.contains("auth_ok")) {
             onError("认证失败: ${authResp.take(120)}")
             close(); return

@@ -47,7 +47,7 @@ class ListenerService : Service() {
     @Volatile private var active = false
     private var record: AudioRecord? = null
     private var player: MediaPlayer? = null
-    private var ws: WebSocketClient? = null
+    private var session: AssistSession? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -99,7 +99,7 @@ class ListenerService : Service() {
         while (active) {
             try {
                 notify("等待唤醒词")
-                AssistSession(
+                session = AssistSession(
                     haUrl = cfg.haUrl,
                     token = cfg.token,
                     pipeline = cfg.pipelineId,
@@ -109,7 +109,8 @@ class ListenerService : Service() {
                     onReply = { lastReply = it; Log.i(TAG, "REPLY: $it") },
                     onTtsUrl = { play(it) },
                     onError = { lastError = it; Log.e(TAG, "err: $it") }
-                ).run()
+                )
+                session!!.run()
             } catch (e: Exception) {
                 lastError = e.message ?: "unknown"
                 Log.e(TAG, "session: ${e.message}")
@@ -141,7 +142,7 @@ class ListenerService : Service() {
 
     override fun onDestroy() {
         active = false
-        try { ws?.close() } catch (_: Exception) {}
+        try { session?.close() } catch (_: Exception) {}
         try { thread?.join(3000) } catch (_: Exception) {}
         try { player?.release() } catch (_: Exception) {}
         running = false
