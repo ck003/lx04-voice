@@ -149,6 +149,8 @@ class AssistSession(
     }
 
     private fun startAudio() {
+        // 先释放可能残留的旧录音会话，否则两个 AudioRecord 会互相抢占麦克风
+        stopAudio()
         try {
             val minBuf = AudioRecord.getMinBufferSize(
                 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
