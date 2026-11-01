@@ -21,7 +21,6 @@ class ListenerService : Service() {
 
     companion object {
         private const val TAG = "LX04Voice"
-        private const val CH = Notification::class.java.name
         private const val NOTIF_ID = 1001
         const val ACTION_START = "io.ck.lx04voice.START"
         const val ACTION_STOP = "io.ck.lx04voice.STOP"
