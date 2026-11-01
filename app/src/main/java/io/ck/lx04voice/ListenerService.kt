@@ -90,8 +90,33 @@ class ListenerService : Service() {
     private fun start() {
         active = true
         running = true
+        prepareDevice()
         thread = Thread { runLoop() }.also { it?.start() }
         Log.i(TAG, "service started")
+    }
+
+    /**
+     * 设备准备：
+     *  1. 停掉小爱的 MiVpmService —— 它常驻独占麦克风，不停掉我们只能录到静音
+     *  2. 打开内置喇叭功放（出厂默认是关的，tinyplay/MediaPlayer 都没声音）
+     * 需要 root，本机已 root。
+     */
+    private fun prepareDevice() {
+        runRoot("setprop ctl.stop mivpm")
+        runRoot("tinymix \"Int Spk Amp Switch\" 1")
+        runRoot("tinymix \"Int Spk Amp Playback Volume\" 10")
+        runRoot("tinymix \"Audio Amp Playback Volume\" 5 5")
+        Log.i(TAG, "device prepared: mivpm stopped, speaker on")
+    }
+
+    private fun runRoot(cmd: String) {
+        try {
+            val p = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+            p.waitFor()
+            Log.i(TAG, "root: $cmd -> ${p.exitValue()}")
+        } catch (e: Exception) {
+            Log.w(TAG, "root failed: $cmd ${e.message}")
+        }
     }
 
     /** 一个长连接，HA 侧持续等唤醒词；断了就重连 */

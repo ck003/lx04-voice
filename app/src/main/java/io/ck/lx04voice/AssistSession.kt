@@ -129,6 +129,8 @@ class AssistSession(
                     if (s.isNotEmpty()) onReply(s)
                 }
                 "tts-end" -> {
+                    // 先停录音再放音，否则自己的 TTS 会把自己再次唤醒
+                    stopAudio()
                     val t = data.optJSONObject("tts_output")?.optString("url")
                     if (!t.isNullOrEmpty()) onTtsUrl(t)
                 }
@@ -151,8 +153,31 @@ class AssistSession(
             val minBuf = AudioRecord.getMinBufferSize(
                 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             val bufSize = maxOf(minBuf, 3200)
-            audio = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufSize * 4)
+
+            // 依次尝试音源：CAMCORDER 是 MTK 上通常最"干净"的路径
+            val sources = listOf(
+                MediaRecorder.AudioSource.CAMCORDER,
+                MediaRecorder.AudioSource.MIC,
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                MediaRecorder.AudioSource.DEFAULT
+            )
+            var chosen = -1
+            for (src in sources) {
+                try {
+                    val rec = AudioRecord(src, 16000, AudioFormat.CHANNEL_IN_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT, bufSize * 4)
+                    if (rec.state == AudioRecord.STATE_INITIALIZED) {
+                        audio = rec
+                        chosen = src
+                        Log.i(TAG, "audio source=$src initialized")
+                        break
+                    } else rec.release()
+                } catch (e: Exception) {
+                    Log.w(TAG, "source $src failed: ${e.message}")
+                }
+            }
+            if (chosen < 0) { onError("麦克风初始化失败"); return }
+
             audio?.startRecording()
             Thread {
                 val buf = ShortArray(1600)  // 100ms
@@ -161,11 +186,13 @@ class AssistSession(
                     if (n <= 0) continue
                     val bytes = ByteArray(n * 2)
                     var sum = 0.0
+                    var peak = 0
                     for (i in 0 until n) {
                         val v = buf[i].toInt()
                         bytes[i * 2] = (v and 0xFF).toByte()
                         bytes[i * 2 + 1] = ((v shr 8) and 0xFF).toByte()
                         sum += v.toDouble() * v
+                        if (Math.abs(v) > peak) peak = Math.abs(v)
                     }
                     sendBinary(bytes, n * 2)
                     sentFrames++
@@ -173,7 +200,7 @@ class AssistSession(
                     if (now - lastLogAt > 2000) {
                         lastLogAt = now
                         val rms = Math.sqrt(sum / n)
-                        Log.i(TAG, "audio frames=$sentFrames rms=${"%.0f".format(rms)}")
+                        Log.i(TAG, "audio frames=$sentFrames src=$chosen rms=${"%.0f".format(rms)} peak=$peak")
                     }
                 }
             }.also { it.isDaemon = true }.start()
