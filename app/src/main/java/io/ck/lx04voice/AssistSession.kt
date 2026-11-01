@@ -82,6 +82,7 @@ class AssistSession(
 
             val obj = try { JSONObject(raw) } catch (_: Exception) { continue }
             val type = obj.optString("type")
+            Log.i(TAG, "msg: ${raw.take(120)}")
 
             if (type == "result") {
                 Log.i(TAG, "result: success=${obj.optBoolean("success")}")
