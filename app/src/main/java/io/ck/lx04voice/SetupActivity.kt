@@ -5,18 +5,19 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.text.InputType
 import android.widget.*
 
 /**
  * 配置界面：只用 Android 框架 API，零第三方依赖（保证在 compileSdk 27 下能编译）。
+ *
+ * 唤醒词、STT、对话、TTS 全部由 HA 的 pipeline 决定，这里只填 HA 地址、令牌和 pipeline ID。
  */
 class SetupActivity : Activity() {
 
     private lateinit var cfg: Config
     private lateinit var urlEdit: EditText
     private lateinit var tokenEdit: EditText
-    private lateinit var thrEdit: EditText
+    private lateinit var pipeEdit: EditText
     private lateinit var statusText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,11 +31,11 @@ class SetupActivity : Activity() {
         }
 
         root.addView(TextView(this).apply {
-            text = "LX04 Voice — 轻量语音触发"
+            text = "LX04 语音助手"
             textSize = 18f
         })
         root.addView(TextView(this).apply {
-            text = "唤醒词与识别都在 HA 服务端完成，本机只检测「有没有人说话」。"
+            text = "本机只负责推流麦克风和播放回复。唤醒词、识别、对话、合成全部在 HA 服务端跑。"
             textSize = 11f
             setPadding(0, pad / 2, 0, pad)
         })
@@ -51,26 +52,25 @@ class SetupActivity : Activity() {
         }
         root.addView(tokenEdit)
 
-        root.addView(TextView(this).apply { text = "灵敏度阈值（越小越灵敏，默认 1200）"; textSize = 12f })
-        thrEdit = EditText(this).apply {
-            setText(cfg.threshold.toString()); textSize = 13f
-            inputType = InputType.TYPE_CLASS_NUMBER
+        root.addView(TextView(this).apply { text = "Assist Pipeline ID"; textSize = 12f })
+        pipeEdit = EditText(this).apply {
+            setText(cfg.pipelineId); hint = "设置 → 语音助手 → 选择 pipeline"; textSize = 11f
         }
-        root.addView(thrEdit)
+        root.addView(pipeEdit)
 
         root.addView(Button(this).apply {
             text = "保存配置"
             setOnClickListener {
                 cfg.haUrl = urlEdit.text.toString()
                 cfg.token = tokenEdit.text.toString()
-                thrEdit.text.toString().toIntOrNull()?.let { cfg.threshold = it }
+                cfg.pipelineId = pipeEdit.text.toString()
                 toast("已保存")
                 refresh()
             }
         })
 
         root.addView(Button(this).apply {
-            text = "启动监听"
+            text = "启动"
             setOnClickListener {
                 if (!cfg.isReady) { toast("请先填写 HA 地址和令牌"); return@setOnClickListener }
                 if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
@@ -80,13 +80,13 @@ class SetupActivity : Activity() {
                     startService(Intent(this@SetupActivity, ListenerService::class.java).apply {
                         action = ListenerService.ACTION_START
                     })
-                    toast("监听已启动"); refresh()
+                    toast("已启动"); refresh()
                 }
             }
         })
 
         root.addView(Button(this).apply {
-            text = "停止监听"
+            text = "停止"
             setOnClickListener {
                 startService(Intent(this@SetupActivity, ListenerService::class.java).apply {
                     action = ListenerService.ACTION_STOP
@@ -111,7 +111,7 @@ class SetupActivity : Activity() {
             startService(Intent(this, ListenerService::class.java).apply {
                 action = ListenerService.ACTION_START
             })
-            toast("监听已启动"); refresh()
+            toast("已启动"); refresh()
         }
     }
 
@@ -119,14 +119,15 @@ class SetupActivity : Activity() {
 
     private fun refresh() {
         val sb = StringBuilder()
-        sb.append(if (ListenerService.running) "状态：监听中" else "状态：已停止")
+        sb.append(if (ListenerService.running) "状态：运行中" else "状态：已停止")
         sb.append("\n配置：").append(if (cfg.isReady) "完整" else "不完整（需地址+令牌）")
-        sb.append("\n阈值：").append(cfg.threshold)
-        if (ListenerService.lastTriggerAt > 0) {
-            sb.append("\n上次触发：")
-                .append((System.currentTimeMillis() - ListenerService.lastTriggerAt) / 1000)
-                .append(" 秒前")
-        }
+        sb.append("\n当前：").append(ListenerService.state)
+        if (ListenerService.lastText.isNotEmpty())
+            sb.append("\n识别：").append(ListenerService.lastText)
+        if (ListenerService.lastReply.isNotEmpty())
+            sb.append("\n回复：").append(ListenerService.lastReply)
+        if (ListenerService.lastError.isNotEmpty())
+            sb.append("\n错误：").append(ListenerService.lastError)
         statusText.text = sb.toString()
     }
 
