@@ -38,6 +38,7 @@ class AssistSession(
     private var socket: Socket? = null
     private var out: OutputStream? = null
     private var inp: InputStream? = null
+    private var din: DataInputStream? = null
     private var msgId = 0
     private var handlerId = 1
     private var audio: AudioRecord? = null
@@ -83,12 +84,14 @@ class AssistSession(
             val type = obj.optString("type")
 
             if (type == "result") {
-                Log.i(TAG, "result: ${obj.optBoolean("success")} ${obj.optString("error")}")
-                if (obj.optBoolean("success") == false) {
+                Log.i(TAG, "result: success=${obj.optBoolean("success")}")
+                if (!obj.optBoolean("success")) {
                     val err = obj.optJSONObject("error")
                     onError("pipeline: ${err?.optString("message") ?: "unknown"}")
+                    break
                 }
-                break
+                // HA 的 result 只是命令接收确认，真正的 event 在后续帧里，继续读
+                continue
             }
             if (type != "event") continue
 
@@ -188,10 +191,10 @@ class AssistSession(
         out?.write(req.toByteArray())
         out?.flush()
 
-        // 读到空行为止
-        val din = DataInputStream(inp)
+        // 读到空行为止（用同一个 din，避免丢字节）
+        val d = din ?: DataInputStream(inp).also { din = it }
         while (true) {
-            val line = readLine(din) ?: throw IOException("handshake closed")
+            val line = readLine(d) ?: throw IOException("handshake closed")
             if (line.isEmpty()) break
         }
     }
@@ -253,21 +256,35 @@ class AssistSession(
     }
 
     private fun readText(): String? {
-        val din = DataInputStream(inp)
+        // 复用同一个 DataInputStream（底层流有状态，每次 new 会丢字节）
+        val din = din ?: DataInputStream(inp).also { din = it }
         val b1 = din.read()
         if (b1 == -1) return null
         val opcode = b1 and 0x0F
         val b2 = din.read()
         if (b2 == -1) return null
+        val masked = (b2 and 0x80) != 0
         var len = b2 and 0x7F
         if (len == 126) {
             len = din.readUnsignedShort()
         } else if (len == 127) {
             len = din.readLong().toInt()
         }
+        val mask = if (masked) ByteArray(4).also { din.readFully(it) } else null
         val payload = ByteArray(len)
         din.readFully(payload)
-        return if (opcode == 0x1 || opcode == 0x2) String(payload, Charsets.UTF_8) else ""
+        if (mask != null) {
+            for (i in payload.indices) {
+                payload[i] = (payload[i].toInt() xor mask[i % 4].toInt()).toByte()
+            }
+        }
+        return when (opcode) {
+            0x1 -> String(payload, Charsets.UTF_8)   // text
+            0x8 -> { close(); null }                  // close
+            0x9 -> { sendFrame(0xA, payload); "" }    // ping -> pong
+            0xA -> ""                                  // pong
+            else -> ""
+        }
     }
 
     fun close() {
